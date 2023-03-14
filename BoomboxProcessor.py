@@ -1,6 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 import torch
+from sklearn.preprocessing import normalize
 
 class BoomboxProcessor:
     def __init__(self, verbose:bool=False) -> None:
@@ -58,7 +59,7 @@ class BoomboxProcessor:
         all_trajectories = []
         all_labels = []
         for genre in self.data_folders:
-            all_trajectories += (self.trajectories[genre])
+            all_trajectories += list(self.trajectories[genre].values())
             all_labels += [self.labels[genre]]*self.num_trajectories[genre]
 
         return (all_trajectories, all_labels)
@@ -104,6 +105,93 @@ class BoomboxProcessor:
                     torch.tensor(self.trajectories[genre][file]).flatten(start_dim=1).float()
                 ).detach().numpy()
                 self.encoded_trajectories[genre][file] = new_traj.reshape(self.trajectories[genre][file].shape[0], 768)
+    
+    def get_encoded_trajectories(self):
+        if self.encoded_trajectories is None:
+            raise Exception("Trajectories not encoded")
+        return self.encoded_trajectories
+    
+    def get_encoded_genre_trajectories(self, genre:str) -> tuple[list[np.ndarray], list[int]]:
+        """
+        Returns a list of all the encoded trajectories for a given genre as well as the genre label.
+        """
+        if self.encoded_trajectories is None:
+            raise Exception("Trajectories not encoded")
+        if genre in self.data_folders:
+            return (list(self.encoded_trajectories[genre].values()), [self.labels[genre]]*self.num_trajectories[genre])
+        else:
+            raise Exception("Genre not found")
+    
+    def get_all_encoded_trajectories(self) -> tuple[list[np.ndarray], list[int]]:
+        """
+        Returns a list of all the encoded trajectories as well as a list all the genre labels.
+        """
+        if self.encoded_trajectories is None:
+            raise Exception("Trajectories not encoded")
+        all_trajectories = []
+        all_labels = []
+        for genre in self.data_folders:
+            all_trajectories += list(self.encoded_trajectories[genre].values())
+            all_labels += [self.labels[genre]]*self.num_trajectories[genre]
+
+        return (all_trajectories, all_labels)
+    
+    def split_song(self, song : np.ndarray, num_songlets : int, norm : bool) -> np.ndarray:
+        """
+        Splits a single song that is (num_timesteps, 768) into (num_songlets, 768).
+        """
+        if self.encoded_trajectories is None:
+            raise Exception("Trajectories not encoded")
+
+        songlet_size = song.shape[0] // num_songlets
+        songlets = []
+
+        for i in range(num_songlets):
+            if i == num_songlets - 1:
+                songlets.append(song[i*songlet_size:])
+            else:
+                songlets.append(song[i*songlet_size:(i+1)*songlet_size])
+
+        if norm:
+            return normalize([np.sum(s, axis=0) for s in songlets])
+        else:
+            return np.stack([np.sum(s, axis=0) for s in songlets])
+    
+    def split_encoded_trajectories(self, num_songlets : int, norm=True) -> None:
+        """
+        Splits all the songs into (num_songlets, 768) songlets.
+        """
+        self.num_songlets = num_songlets
+        self.songlet_trajectories = dict()
+        for genre in self.data_folders:
+            self.songlet_trajectories[genre] = dict()
+            for file in self.trajectories[genre]:
+                self.songlet_trajectories[genre][file] = self.split_song(self.encoded_trajectories[genre][file], num_songlets, norm)
+    
+    def get_songlet_trajectories(self):
+        if self.songlet_trajectories is None:
+            raise Exception("Songlets not split")
+        return self.songlet_trajectories
+    
+    def get_all_songlet_trajectories(self) -> tuple[list[np.ndarray], list[int]]:
+        """
+        Returns a list of all the songlet trajectories as well as a list all the genre labels.
+        """
+        if self.songlet_trajectories is None:
+            raise Exception("Songlets not split")
+        
+        all_trajectories = np.zeros((sum(self.num_trajectories.values()), self.num_songlets, 768))
+        all_labels = np.zeros(sum(self.num_trajectories.values()), dtype=int)
+
+        i = 0
+        for genre in self.data_folders:
+            for file in self.trajectories[genre]:
+                all_trajectories[i] = self.songlet_trajectories[genre][file]
+                all_labels[i] = self.labels[genre]
+                i += 1
+        
+        return (all_trajectories, all_labels)
+
 
 
 if __name__ == "__main__":

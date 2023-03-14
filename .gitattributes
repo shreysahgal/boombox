@@ -1,6 +1,0 @@
-*.npy filter=lfs diff=lfs merge=lfs -text
-data/90s_hiphop_trajectories.npy filter=lfs diff=lfs merge=lfs -text
-data/90s_rock_trajectories.npy filter=lfs diff=lfs merge=lfs -text
-data/classical_trajectories.npy filter=lfs diff=lfs merge=lfs -text
-data/country_trajectories.npy filter=lfs diff=lfs merge=lfs -text
-data/2010s_pop_trajectories.npy filter=lfs diff=lfs merge=lfs -text
