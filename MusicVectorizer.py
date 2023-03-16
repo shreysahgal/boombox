@@ -27,12 +27,7 @@ class MusicVectorizer:
         with torch.no_grad():
             outputs = self.model(inputs['input_values'].cuda(), inputs['attention_mask'].cuda(), output_hidden_states=True)
         
-        # hidden_states = torch.stack(outputs.hidden_states).squeeze()
-        # return hidden_states.mean(-2)
-        # breakpoint()
         return torch.stack([i.cpu() for i in outputs.hidden_states]).squeeze().mean(-2).numpy()  # returns a (13, 768) feature vector
-        # # hidden_states = 
-        # # return hidden_states.mean(-2)
 
     def trajectorize_song(self, song, sr, sample_time=5, layer=12, verbose=False):
         song_length = song.shape[0]
