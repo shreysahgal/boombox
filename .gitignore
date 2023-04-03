@@ -1,3 +1,6 @@
+# TRAJECTORIES ARE TOO DAMN BIG
+*.npy
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +130,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Data files
+data/
+
+# Model files
+models/
