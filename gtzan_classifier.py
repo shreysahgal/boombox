@@ -9,6 +9,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
 from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
 import matplotlib.pyplot as plt
+import time
 
 class GenreClassifier2D(nn.Module):
     def __init__(self):
@@ -29,28 +30,23 @@ class GenreClassifier2D(nn.Module):
 
         self.fc_group = nn.Sequential(
             nn.Linear(3072, 1024),
-            nn.BatchNorm1d(1024),
+            # nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Dropout(p=0.3),
+            # nn.Dropout(p=0.3),
             nn.Linear(1024, 128),
-            nn.BatchNorm1d(128),
+            # nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.Dropout(p=0.3),
+            # nn.Dropout(p=0.3),
             nn.Linear(128, 10),
             nn.Softmax(dim=1)
         )
 
     def forward(self, x):
-        x = x.view(x.shape[0], 1, x.shape[1], x.shape[2])
         x = self.conv_group(x)
         x = self.flatten(x)
         x = self.droput(x)
         x = self.fc_group(x)
-        # print(x.shape)
-        # x = F.relu(self.fc1(x))
-        # x = F.relu(self.fc2(x))
-        # x = self.fc3(x)
-        # x = self.softmax(x)
+
         return x
 
 
@@ -152,7 +148,7 @@ class TrajectoryDataset(Dataset):
         return self.trajs.shape[0]
 
     def __getitem__(self, idx):
-        return self.trajs[idx].view(1, 5, 768), self.labels[idx]
+        return self.trajs[idx:idx+1], self.labels[idx]
 
 def train_epoch(model, device, dataloader, loss_fxn, optimizer):
     model.train()
@@ -192,10 +188,9 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
     X = torch.randn(1, 5, 768).to(device)
+    X = X.reshape(X.shape[0], 1, X.shape[1], X.shape[2])
     print(model(X).shape)
 
-    breakpoint()
-    
     # load the data
     data_folder = "/home/shrey/Documents/eecs448-boombox/data/gtzan/"
     genres = ["blues", "classical", "country", "disco", "hiphop", "jazz", "metal", "pop", "reggae", "rock"]
@@ -232,7 +227,10 @@ if __name__ == '__main__':
     train_acc_list = dict()
     test_acc_list = dict()
     iters = dict()
-    num_epochs = 100
+
+    num_epochs = 150
+    print_epochs = 20
+    log_epochs = 5
 
     for i, (train_idx, val_idx) in enumerate(kf.split(X_train)):
         print("Training fold {}...".format(i+1))
@@ -250,14 +248,14 @@ if __name__ == '__main__':
 
         model = GenreClassifier2D().to(device)
         loss_fxn = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-3)
 
         print(f"Fold {i}/{n_splits} training with {len(train_loader.sampler)} training samples and {len(val_loader.sampler)} validation samples...")
 
         for epoch in range(num_epochs):
             train_loss, train_correct = train_epoch(model, device, train_loader, loss_fxn, optimizer)
 
-            if epoch % 10 == 0:
+            if epoch % log_epochs == 0:
                 val_loss, val_correct = valid_epoch(model, device, val_loader, loss_fxn)
 
                 train_loss_list[i].append(train_loss/len(train_loader.sampler))
@@ -266,7 +264,7 @@ if __name__ == '__main__':
                 test_acc_list[i].append(val_correct/len(val_loader.sampler))
                 iters[i].append(epoch)
 
-            if epoch % 50 == 0:
+            if epoch % print_epochs == 0:
                 print("Epoch: {}, Train Loss: {}, Train Acc: {}, Val Loss: {}, Val Acc: {}".format(epoch, train_loss/len(train_loader.sampler), train_correct/len(train_loader.sampler), val_loss/len(val_loader.sampler), val_correct/len(val_loader.sampler)))
 
     # print summary of final train/val accuracy for all folds wity f-strings
@@ -298,5 +296,3 @@ if __name__ == '__main__':
     ax[1, 1].legend()
 
     fig.savefig("results.png")
-
-    breakpoint()
