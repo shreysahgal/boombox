@@ -10,7 +10,7 @@ import sox
 # 
 # 
 
-matchlist_csv_filename = os.getcwd() + "/salami_youtube_pairings.csv"
+matchlist_csv_filename = os.getcwd() + "/matching-salami/salami_youtube_pairings.csv"
 downloaded_audio_folder = os.getcwd() + "/downloaded_audio"
 transformed_audio_folder = os.getcwd() + "/transformed_audio"
 

@@ -15,8 +15,9 @@ class SalamiMachine:
     songs = []
 
     # Youtube download and post-processing options
-    YDL_OPTS = {
-        'outtmpl': os.path.join(str(DOWNLOADED_AUDIO_FOLDER), u'%(id)s.%(ext)s'),
+    downloaded_audio_folder = os.getcwd() + "/downloaded_audio"
+    ydl_opts = {
+        'outtmpl': os.path.join(downloaded_audio_folder, u'%(id)s.%(ext)s'),
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -42,7 +43,7 @@ class SalamiMachine:
 
     def download_video(self, youtube_id, redownload=False, sleep=0):
         global ydl_opts
-        if (not os.path.exists(str(self.DOWNLOADED_AUDIO_FOLDER) + "/" + youtube_id + ".mp3")) or (redownload):
+        if (not os.path.exists(str(self.downloaded_audio_folder) + "/" + youtube_id + ".mp3")) or (redownload):
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     x = ydl.download(['http://www.youtube.com/watch?v='+youtube_id])
@@ -53,8 +54,8 @@ class SalamiMachine:
                 raise
             except:
                 print("Error downloading video ({0})".format(youtube_id))
-                if (not os.path.exists(str(self.DOWNLOADED_AUDIO_FOLDER) + "/" + youtube_id + ".txt")):
-                    open(str(self.DOWNLOADED_AUDIO_FOLDER) + "/" + youtube_id + ".txt", 'a').close()
+                if (not os.path.exists(str(self.downloaded_audio_folder) + "/" + youtube_id + ".txt")):
+                    open(str(self.downloaded_audio_folder) + "/" + youtube_id + ".txt", 'a').close()
                 return "error"
         else:
             return "downloaded"
@@ -69,6 +70,7 @@ class SalamiMachine:
         with open(pairings_path, 'r') as f:
             reader = csv.DictReader(f)
             for row in reader:
+                print("Downloading video ({0})".format(row["youtube_id"]))
                 status = self.download_video(row["youtube_id"])
                 if status == "downloaded":
                     self.songs.append({
