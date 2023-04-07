@@ -29,7 +29,7 @@ class GenreClassifier2D(nn.Module):
         self.droput = nn.Dropout(p=0.3)
 
         self.fc_group = nn.Sequential(
-            nn.Linear(3072, 1024),
+            nn.Linear(6144, 1024),
             # nn.BatchNorm1d(1024),
             nn.ReLU(),
             # nn.Dropout(p=0.3),
@@ -48,8 +48,6 @@ class GenreClassifier2D(nn.Module):
         x = self.fc_group(x)
 
         return x
-
-
 
 
 class GenreClassifier(nn.Module):
@@ -183,11 +181,20 @@ def valid_epoch(model, device, dataloader, loss_fxn):
     return val_loss, val_correct
 
 if __name__ == '__main__':
+    # define constants
+    BATCH_SIZE = 32
+    EPOCHS = 200
+    LR = 1e-5
+    WEIGHT_DECAY = 1e-3
+    S = 10
+    PLOT_PATH = "plots/genre_classifier_2d_S=10.png"
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     # test model on a single datapoint
     model = GenreClassifier2D()
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
     model.to(device)
-    X = torch.randn(1, 5, 768).to(device)
+    X = torch.randn(1, S, 768).to(device)
     X = X.reshape(X.shape[0], 1, X.shape[1], X.shape[2])
     print(model(X).shape)
 
@@ -199,7 +206,7 @@ if __name__ == '__main__':
     boombox.load_trajectories(data_folder, genres, "trajs.pkl")
     boombox.load_encoding_model("models/model_50000.pt", BoomboxNet)
     boombox.encode_trajectories()
-    boombox.split_encoded_trajectories(5)
+    boombox.split_encoded_trajectories(S)
     trajs, labels = boombox.get_all_songlet_trajectories()
 
     # trajs = trajs.reshape(trajs.shape[0], trajs.shape[1], trajs.shape[2])
@@ -228,7 +235,6 @@ if __name__ == '__main__':
     test_acc_list = dict()
     iters = dict()
 
-    num_epochs = 150
     print_epochs = 20
     log_epochs = 5
 
@@ -243,16 +249,16 @@ if __name__ == '__main__':
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SubsetRandomSampler(val_idx)
 
-        train_loader = DataLoader(dataset, batch_size=32, sampler=train_sampler)
-        val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
+        train_loader = DataLoader(dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
+        val_loader = DataLoader(dataset, batch_size=BATCH_SIZE, sampler=val_sampler)
 
         model = GenreClassifier2D().to(device)
         loss_fxn = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
-        print(f"Fold {i}/{n_splits} training with {len(train_loader.sampler)} training samples and {len(val_loader.sampler)} validation samples...")
+        print(f"Fold {i+1}/{n_splits} training with {len(train_loader.sampler)} training samples and {len(val_loader.sampler)} validation samples...")
 
-        for epoch in range(num_epochs):
+        for epoch in range(EPOCHS):
             train_loss, train_correct = train_epoch(model, device, train_loader, loss_fxn, optimizer)
 
             if epoch % log_epochs == 0:
@@ -295,4 +301,4 @@ if __name__ == '__main__':
     ax[1, 0].legend()
     ax[1, 1].legend()
 
-    fig.savefig("results.png")
+    fig.savefig(PLOT_PATH)

@@ -2,13 +2,14 @@ import numpy as np
 from tqdm import tqdm
 import torch
 from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
 import os
 
 class BoomboxProcessor:
     def __init__(self, verbose:bool=False) -> None:
         self.verbose : bool = verbose
 
-    def load_trajectories(self, data_folder : str, genres : list[str], traj_file : str):
+    def load_trajectories(self, data_folder : str, genres : list[str], traj_file : str, is_numpy : bool = False):
         """
         Loads the trajectories from the given data folders.
         """
@@ -20,7 +21,10 @@ class BoomboxProcessor:
 
         for genre in self.genres:
             file = os.path.join(self.data_folder, genre, traj_file)
-            self.trajectories[genre] = np.load(file, allow_pickle=True)
+            if not is_numpy:
+                self.trajectories[genre] = np.load(file, allow_pickle=True)
+            else:
+                self.trajectories[genre] = np.load(file, allow_pickle=True).item()
             self.num_trajectories[genre] = len(self.trajectories[genre])
             self.song_lengths[genre] = {song: trajectory.shape[0] for song, trajectory in self.trajectories[genre].items()}
             if self.verbose:
@@ -108,7 +112,21 @@ class BoomboxProcessor:
                     torch.tensor(self.trajectories[genre][file]).flatten(start_dim=1).float()
                 ).detach().numpy()
                 self.encoded_trajectories[genre][file] = new_traj.reshape(self.trajectories[genre][file].shape[0], 768)
-    
+
+    def encode_trajectories_pca(self) -> None:
+        """
+        Encodes all the trajectories using PCA.
+        """
+        self.encoded_trajectories = dict()
+        for genre in self.genres:
+            self.encoded_trajectories[genre] = dict()
+            genres_iter = tqdm(self.trajectories[genre]) if self.verbose else self.trajectories[genre]
+            for song in genres_iter:
+                pca = PCA(n_components=1)
+                pca.fit(self.trajectories[genre][song].reshape(-1, 13))
+                self.encoded_trajectories[genre][song] = \
+                    pca.transform(self.trajectories[genre][song].reshape(-1, 13)).reshape(self.trajectories[genre][song].shape[0], 768)
+        
     def get_encoded_trajectories(self):
         if self.encoded_trajectories is None:
             raise Exception("Trajectories not encoded")
