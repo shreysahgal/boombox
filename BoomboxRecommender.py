@@ -1,26 +1,40 @@
 import pandas as pd
 import numpy as np
 import torch
+import time
 
 class BoomboxRecommender:
-    def recommend_songs(self, liked_songs, all_songs, S=10, return_num=10):
-        projections = list()
+    def recommend_songs(self, liked_songs : np.ndarray, all_songs : np.ndarray, S=10, return_num=10, device="cuda"):
+        start = time.time()
+
+        liked_songs = torch.from_numpy(liked_songs).to(device)
+        all_songs = torch.from_numpy(all_songs).to(device)
+
+        projections = torch.zeros((S, 768, 768)).to(device)
         for songlet in range(S):
             A = liked_songs[songlet].T
-            P = A @ np.linalg.inv((A.T  @ A)) @ A.T
-            projections.append(P)
-
-        projected_songs = np.zeros_like(all_songs)
-        for song in range(all_songs.shape[0]):
-            for songlet in range(S):
-                proj = projections[songlet] @ all_songs[song, songlet, :]
-                projected_songs[song, songlet, :] = proj
+            P = A @ torch.linalg.inv((A.T  @ A)) @ A.T
+            projections[songlet] = P
         
-        norms = torch.norm((torch.tensor(projected_songs) - torch.tensor(trajs)), dim=2, p=2)
+        checkpoint1 = time.time()
+
+        projected_songs = torch.zeros_like(all_songs).to(device)
+        for song in range(all_songs.shape[0]):
+            projected_songs[song, :, :] = torch.matmul(projections, all_songs[song, :, :, None]).squeeze(-1)
+
+        checkpoint2 = time.time()
+        
+        norms = torch.norm(projected_songs - all_songs, dim=2, p=2)
         norms = torch.sum(norms, dim=1)
         _, indices = torch.sort(norms, descending=False)
 
-        return indices[:return_num]
+        checkpoint3 = time.time()
+
+        print(f"Checkpoint 1: {checkpoint1 - start} seconds")
+        print(f"Checkpoint 2: {checkpoint2 - checkpoint1} seconds")
+        print(f"Checkpoint 3: {checkpoint3 - checkpoint2} seconds")
+
+        return indices.cpu().numpy()[:return_num]
     
 if __name__ == "__main__":
 
@@ -51,9 +65,12 @@ if __name__ == "__main__":
     for i, name in enumerate(liked_names):
         liked[i] = df[df["file"] == name]["trajectory"].iloc[0]
     
+    start = time.time()
     # get recommendations
     bbr = BoomboxRecommender()
     indices = bbr.recommend_songs(liked, trajs)
+    elapsed = time.time() - start
 
     # print names of recommendations
-    print(names[indices])
+    print(f"Elapsed time: {elapsed} seconds")
+    print(df.iloc[indices])
