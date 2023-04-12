@@ -1,24 +1,79 @@
 import numpy as np
 import librosa
-import glob
+from glob import glob
 import pickle
 from tqdm import tqdm
-
+import os
+import pickletools
+import pandas as pd
 from MusicVectorizer import MusicVectorizer
+from train_encoding_model import BoomboxNet
+import torch
+from sklearn.preprocessing import normalize
 
 SAMPLE_RATE = 16000
 
-data_folders = ["90s_hiphop", "90s_rock", "2010s_pop", "classical", "country"]
+data_folder = "data/large_dataset"
 
 mv = MusicVectorizer()
 
-for folder in data_folders[1:]:
-    data = pickle.load(open("data/" + folder + ".pkl", "rb"))
-    print(folder)
+encoding_model = BoomboxNet()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+encoding_model.load_state_dict(torch.load("models/model_50000.pt", map_location=torch.device(device)))
+
+genres = [os.path.basename(folder) for folder in glob(data_folder + "/*") if "." not in folder]
+
+df = pd.DataFrame(columns=["genre", "file", "trajectory"])
+
+totals, counts = [], []
+
+
+SAMPLE_TIME = 3
+NUM_SONGLETS = 10
+NORM = True
+
+for genre in genres:
+    print(genre)
     trajectories = dict()
-    for path, song in tqdm(data.items()):
+
+    totals.append(0)
+    counts.append(0)
+
+    for file in tqdm(glob(f"{data_folder}/{genre}/*.mp3")):
+        y, sr = librosa.load(file, sr=SAMPLE_RATE)
+        totals[-1] += 1
+
         try:
-            trajectories[path] = mv.trajectorize_song(song, SAMPLE_RATE)
-        except:
-            print("Error vectorizing file: ", path)
-    np.save("data/" + folder + "_trajectories.npy", trajectories)
+            traj = mv.trajectorize_song(y, SAMPLE_RATE, sample_time=SAMPLE_TIME)
+            traj = encoding_model.fc1(torch.tensor(traj).flatten(start_dim=1).float()).detach().numpy()
+
+            songlet_size = traj.shape[0] // NUM_SONGLETS
+            songlets = []
+
+            for i in range(NUM_SONGLETS):
+                if i == NUM_SONGLETS - 1:
+                    songlets.append(traj[i*songlet_size:])
+                else:
+                    songlets.append(traj[i*songlet_size:(i+1)*songlet_size])
+
+            if NORM:
+                songlets = np.array(normalize([np.sum(s, axis=0) for s in songlets]))
+            else:
+                songlets = np.stack([np.sum(s, axis=0) for s in songlets])
+
+            counts[-1] += 1
+
+            df = pd.concat([df, pd.DataFrame({"genre": genre, "file": file, "trajectory": [np.float32(songlets)]})], ignore_index=True)
+        
+        except Exception as e:
+            print(f"Error with {file}: {e}")
+            continue
+
+        df = pd.concat([df, pd.DataFrame({"genre": genre, "file": file, "trajectory": [traj]})], ignore_index=True)
+
+df.to_pickle(f"{data_folder}/trajectories.pkl")
+
+for i in range(len(genres)):
+    print(f"{genres[i]}: {counts[i]}/{totals[i]}")
+
+breakpoint()
