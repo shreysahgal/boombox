@@ -19,8 +19,17 @@ class BoomboxNet(nn.Module):
       # First fully connected layer
       self.fc1 = nn.Linear(13 * 768, 768)
       
+      # Apply pooling to not overfit
+      self.p1 = nn.MaxPool1d(4)
+
+      # gradual downsizing
+      self.fc2 = nn.Linear(192, 96)
+
+      # normalizing
+      self.sm = nn.Softmax()
+
       # Get outputs
-      self.fc2 = nn.Linear(768,5)
+      self.fc3 = nn.Linear(96,5)
       
     def forward(self, x):
       outputs = F.relu(self.fc1(x))
