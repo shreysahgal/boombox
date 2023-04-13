@@ -10,6 +10,7 @@ from MusicVectorizer import MusicVectorizer
 from train_encoding_model import BoomboxNet
 import torch
 from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
 
 SAMPLE_RATE = 16000
 
@@ -46,32 +47,16 @@ for genre in genres:
         try:
             traj = mv.trajectorize_song(y, SAMPLE_RATE, sample_time=SAMPLE_TIME)
             traj = encoding_model.fc1(torch.tensor(traj).flatten(start_dim=1).float()).detach().numpy()
+            pca = PCA(n_components=2).fit(traj)
+            reduced = pca.transform(traj)
 
-            songlet_size = traj.shape[0] // NUM_SONGLETS
-            songlets = []
-
-            for i in range(NUM_SONGLETS):
-                if i == NUM_SONGLETS - 1:
-                    songlets.append(traj[i*songlet_size:])
-                else:
-                    songlets.append(traj[i*songlet_size:(i+1)*songlet_size])
-
-            if NORM:
-                songlets = np.array(normalize([np.sum(s, axis=0) for s in songlets]))
-            else:
-                songlets = np.stack([np.sum(s, axis=0) for s in songlets])
-
-            counts[-1] += 1
-
-            df = pd.concat([df, pd.DataFrame({"genre": genre, "file": file, "trajectory": [np.float32(songlets)]})], ignore_index=True)
+            df = pd.concat([df, pd.DataFrame({"genre": genre, "file": file, "trajectory": [np.float32(reduced)]})], ignore_index=True)
         
         except Exception as e:
             print(f"Error with {file}: {e}")
             continue
 
-        df = pd.concat([df, pd.DataFrame({"genre": genre, "file": file, "trajectory": [traj]})], ignore_index=True)
-
-df.to_pickle(f"{data_folder}/trajectories.pkl")
+df.to_pickle(f"{data_folder}/viz_trajectories.pkl")
 
 for i in range(len(genres)):
     print(f"{genres[i]}: {counts[i]}/{totals[i]}")

@@ -1,31 +1,41 @@
 import numpy as np
 from tqdm import tqdm
 import torch
+from glob import glob
+import os
 from sklearn.preprocessing import normalize
 
 class BoomboxProcessor:
     def __init__(self, verbose:bool=False) -> None:
         self.verbose : bool = verbose
 
-    def load_trajectories(self, data_folders: list[str]):
+    def load_trajectories(self, data_folder: str, fname: str, is_numpy=False):
         """
         Loads the trajectories from the given data folders.
         """
-        self.data_folders : list[str] = data_folders
+        self.data_folder = data_folder
+
+
+        self.genres: list[str] = [os.path.basename(folder) for folder in glob(data_folder + "/*") if "." not in folder]
         self.trajectories : dict[str, dict[str, np.ndarray]]= dict()
         self.num_trajectories : dict[str, int] = dict()
         self.song_lengths = dict()
 
-        for folder in self.data_folders:
-            self.trajectories[folder] = np.load(f"data/{folder}_trajectories.npy", allow_pickle=True).item()
-            self.num_trajectories[folder] = len(self.trajectories[folder])
-            self.song_lengths[folder] = {song: trajectory.shape[0] for song, trajectory in self.trajectories[folder].items()}
+        for genre in self.genres:
+            print(genre)
+            if is_numpy:
+                self.trajectories[genre] = np.load(f"{data_folder}/{genre}/{fname}", allow_pickle=True).item()
+            else:
+                self.trajectories[genre] = np.load(f"{data_folder}/{genre}/{fname}", allow_pickle=True)
+            self.num_trajectories[genre] = len(self.trajectories[genre])
+            self.song_lengths[genre] = {song: trajectory.shape[0] for song, trajectory in self.trajectories[genre].items()}
+            print(len(self.song_lengths[genre]))
             if self.verbose:
-                print(f"Loaded {self.num_trajectories[folder]} trajectories from {folder}")
+                print(f"Loaded {self.num_trajectories[genre]} trajectories from {genre}")
         
         self.labels = dict()
-        for idx, folder in enumerate(self.data_folders):
-            self.labels[folder] = idx
+        for idx, genre in enumerate(self.genres):
+            self.labels[genre] = idx
 
 
     def get_labels(self):
@@ -47,7 +57,7 @@ class BoomboxProcessor:
         """
         Returns a list of all the trajectories for a given genre as well as the genre label.
         """
-        if genre in self.data_folders:
+        if genre in self.genres:
             return (list(self.trajectories[genre].values()), [self.labels[genre]]*self.num_trajectories[genre])
         else:
             raise Exception("Genre not found")
@@ -58,7 +68,7 @@ class BoomboxProcessor:
         """
         all_trajectories = []
         all_labels = []
-        for genre in self.data_folders:
+        for genre in self.genres:
             all_trajectories += list(self.trajectories[genre].values())
             all_labels += [self.labels[genre]]*self.num_trajectories[genre]
 
@@ -68,12 +78,12 @@ class BoomboxProcessor:
         """
         Returns a list of all the features as well as a list all the genre labels.
         """
-        N = sum([sum(self.song_lengths[folder].values()) for folder in self.data_folders])
+        N = sum([sum(self.song_lengths[folder].values()) for folder in self.genres])
         all_features = np.zeros((N, 13, 768))
         all_labels = np.zeros(N, dtype=int)
 
         i = 0
-        for genre in self.data_folders:
+        for genre in self.genres:
             for file in self.trajectories[genre]:
                 all_features[i:i+self.song_lengths[genre][file]] = self.trajectories[genre][file]
                 all_labels[i:i+self.num_trajectories[genre]] = self.labels[genre]
@@ -97,7 +107,7 @@ class BoomboxProcessor:
             raise Exception("Encoding model not loaded")
 
         self.encoded_trajectories = dict()
-        for genre in self.data_folders:
+        for genre in self.genres:
             self.encoded_trajectories[genre] = dict()
             iterator = tqdm(self.trajectories[genre]) if self.verbose else self.trajectories[genre]
             for file in iterator:
@@ -117,7 +127,7 @@ class BoomboxProcessor:
         """
         if self.encoded_trajectories is None:
             raise Exception("Trajectories not encoded")
-        if genre in self.data_folders:
+        if genre in self.genres:
             return (list(self.encoded_trajectories[genre].values()), [self.labels[genre]]*self.num_trajectories[genre])
         else:
             raise Exception("Genre not found")
@@ -130,7 +140,7 @@ class BoomboxProcessor:
             raise Exception("Trajectories not encoded")
         all_trajectories = []
         all_labels = []
-        for genre in self.data_folders:
+        for genre in self.genres:
             all_trajectories += list(self.encoded_trajectories[genre].values())
             all_labels += [self.labels[genre]]*self.num_trajectories[genre]
 
@@ -163,7 +173,7 @@ class BoomboxProcessor:
         """
         self.num_songlets = num_songlets
         self.songlet_trajectories = dict()
-        for genre in self.data_folders:
+        for genre in self.genres:
             self.songlet_trajectories[genre] = dict()
             for file in self.trajectories[genre]:
                 self.songlet_trajectories[genre][file] = self.split_song(self.encoded_trajectories[genre][file], num_songlets, norm)
@@ -184,7 +194,7 @@ class BoomboxProcessor:
         all_labels = np.zeros(sum(self.num_trajectories.values()), dtype=int)
 
         i = 0
-        for genre in self.data_folders:
+        for genre in self.genres:
             for file in self.trajectories[genre]:
                 all_trajectories[i] = self.songlet_trajectories[genre][file]
                 all_labels[i] = self.labels[genre]
